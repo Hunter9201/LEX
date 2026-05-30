@@ -3,61 +3,141 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Lex · Infinite Stories — Auto‑Loop & Live Updates</title>
+    <title>Lex · WhatsApp‑Style Status Stories (Full Feature)</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', sans-serif; background: #f5f7fb; }
 
-        /* FULL SCREEN STORIES MODAL — WhatsApp style */
-        .lh-stories-modal {
+        /* Floating button to re-open list */
+        .fab {
+            position: fixed;
+            bottom: 24px;
+            right: 24px;
+            width: 56px;
+            height: 56px;
+            background: #1e4a6e;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.25);
+            cursor: pointer;
+            z-index: 99999;
+            color: white;
+            font-size: 24px;
+            border: 2px solid white;
+            transition: 0.2s;
+        }
+        .fab:hover { transform: scale(1.05); background: #0f3b35; }
+
+        /* Status list modal */
+        .list-modal {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: #000000;
+            background: white;
             z-index: 1000000;
+            display: flex;
+            flex-direction: column;
+            visibility: hidden;
+            opacity: 0;
+            transition: 0.2s;
+        }
+        .list-modal.active { visibility: visible; opacity: 1; }
+        .list-header {
+            padding: 1.2rem 1.5rem;
+            background: white;
+            border-bottom: 1px solid #eef2f6;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .list-header h2 { font-size: 1.5rem; font-weight: 700; }
+        .close-list { background: none; border: none; font-size: 1.8rem; cursor: pointer; color: #5b6e8c; }
+        .status-list { flex: 1; overflow-y: auto; padding: 0.5rem 0; }
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 16px;
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #f0f2f5;
+            transition: background 0.1s;
+        }
+        .status-item:hover { background: #f8fafc; }
+        .avatar {
+            position: relative;
+            width: 56px;
+            height: 56px;
+        }
+        .avatar-circle {
+            width: 56px;
+            height: 56px;
+            background: #1f5e54;
+            border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 1.2rem;
+            text-transform: uppercase;
+        }
+        .ring {
+            position: absolute;
+            top: -2px;
+            left: -2px;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            border: 2px solid #cbd5e1;
+        }
+        .ring.unseen { border-color: #25D366; box-shadow: 0 0 0 2px #e6f7ef; }
+        .info { flex: 1; }
+        .name { font-weight: 600; }
+        .time { font-size: 0.75rem; color: #64748b; margin-top: 4px; }
+        .badge { background: #25D366; color: white; border-radius: 20px; padding: 2px 8px; font-size: 0.7rem; font-weight: 600; }
+
+        /* Full screen story viewer */
+        .story-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            z-index: 1000001;
+            display: flex;
             visibility: hidden;
             opacity: 0;
-            transition: opacity 0.2s ease;
+            transition: opacity 0.2s;
         }
-        .lh-stories-modal.active {
-            visibility: visible;
-            opacity: 1;
-        }
-        .lh-stories-container {
+        .story-modal.active { visibility: visible; opacity: 1; }
+        .story-container {
             width: 100%;
             height: 100%;
             background: #0a0c10;
             position: relative;
-            overflow: hidden;
-            display: flex;
-            flex-direction: column;
         }
-
-        /* Story header */
-        .lh-story-header {
+        .story-header {
             position: absolute;
             top: 18px;
             left: 18px;
-            right: 18px;
-            z-index: 30;
-            display: flex;
-            align-items: center;
-            gap: 12px;
             background: rgba(0,0,0,0.55);
             backdrop-filter: blur(8px);
             padding: 8px 16px;
             border-radius: 60px;
-            width: fit-content;
-            max-width: 75%;
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            z-index: 30;
             pointer-events: none;
         }
-        .lh-story-avatar {
+        .story-avatar {
             width: 40px;
             height: 40px;
             background: #1f5e54;
@@ -67,18 +147,9 @@
             justify-content: center;
             color: white;
             font-weight: 700;
-            font-size: 1rem;
-            text-transform: uppercase;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
         }
-        .lh-story-author {
-            font-weight: 600;
-            color: white;
-            font-size: 0.95rem;
-            letter-spacing: -0.2px;
-            text-shadow: 0 1px 1px black;
-        }
-        .lh-close-story {
+        .story-name { color: white; font-weight: 600; }
+        .close-story {
             position: absolute;
             top: 20px;
             right: 20px;
@@ -91,18 +162,10 @@
             border-radius: 40px;
             cursor: pointer;
             z-index: 30;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            backdrop-filter: blur(6px);
             transition: 0.2s;
         }
-        .lh-close-story:hover {
-            background: rgba(255,255,255,0.2);
-        }
-
-        /* Progress bars */
-        .lh-progress-strip {
+        .close-story:hover { background: rgba(255,255,255,0.2); }
+        .progress-strip {
             position: absolute;
             top: 12px;
             left: 12px;
@@ -111,89 +174,36 @@
             gap: 6px;
             z-index: 25;
         }
-        .lh-progress-segment {
+        .progress-segment {
             flex: 1;
             height: 3px;
             background: rgba(255,255,255,0.4);
             border-radius: 4px;
             overflow: hidden;
         }
-        .lh-progress-fill {
+        .progress-fill {
             height: 100%;
             width: 0%;
             background: white;
             transition: width 0.05s linear;
         }
-
-        /* Slide content */
-        .lh-story-slide {
-            flex: 1;
+        .story-slide {
+            width: 100%;
+            height: 100%;
             display: flex;
             flex-direction: column;
             justify-content: center;
             align-items: center;
-            width: 100%;
-            height: 100%;
-            padding: 80px 20px 40px 20px;
+            padding: 80px 20px 40px;
             text-align: center;
             color: white;
-            background: radial-gradient(circle at 30% 20%, rgba(25, 55, 70, 0.7), #000000cc);
+            background: radial-gradient(circle at 30% 20%, rgba(25,55,70,0.7), #000000cc);
             overflow-y: auto;
         }
-        .lh-story-slide img {
-            max-width: 92%;
-            max-height: 70vh;
-            border-radius: 28px;
-            object-fit: contain;
-            box-shadow: 0 20px 30px rgba(0,0,0,0.5);
-        }
-        .lh-story-slide video, 
-        .lh-story-slide iframe {
-            max-width: 95%;
-            max-height: 65vh;
-            border-radius: 28px;
-            background: #000;
-            border: none;
-        }
-        .lh-story-text {
-            font-size: 1.7rem;
-            line-height: 1.4;
-            font-weight: 500;
-            text-shadow: 0 2px 5px rgba(0,0,0,0.6);
-            max-width: 90%;
-            word-break: break-word;
-            margin-bottom: 20px;
-        }
-        .lh-story-text-small {
-            font-size: 1.2rem;
-        }
-        .lh-article-link {
-            display: inline-flex;
-            align-items: center;
-            gap: 10px;
-            background: #1e4a6e;
-            padding: 12px 24px;
-            border-radius: 60px;
-            color: white;
-            text-decoration: none;
-            font-weight: 600;
-            font-size: 1rem;
-            margin-top: 20px;
-            transition: 0.2s;
-            backdrop-filter: blur(4px);
-        }
-        .lh-update-meta {
-            font-size: 0.7rem;
-            opacity: 0.7;
-            margin-top: 16px;
-            background: rgba(0,0,0,0.5);
-            padding: 6px 14px;
-            border-radius: 40px;
-            display: inline-block;
-        }
-
-        /* Click zones */
-        .lh-click-zones {
+        .story-slide img { max-width: 92%; max-height: 70vh; border-radius: 28px; object-fit: contain; }
+        .story-slide video, .story-slide iframe { max-width: 95%; max-height: 65vh; border-radius: 28px; }
+        .story-text { font-size: 1.7rem; font-weight: 500; text-shadow: 0 2px 5px rgba(0,0,0,0.6); margin-bottom: 20px; }
+        .click-zones {
             position: absolute;
             top: 0;
             left: 0;
@@ -202,12 +212,8 @@
             display: flex;
             z-index: 15;
         }
-        .lh-click-left, .lh-click-right {
-            flex: 1;
-            cursor: pointer;
-            height: 100%;
-        }
-        .lh-pause-indicator {
+        .click-left, .click-right { flex: 1; cursor: pointer; }
+        .pause-indicator {
             position: absolute;
             bottom: 35px;
             left: 50%;
@@ -218,527 +224,405 @@
             font-size: 0.8rem;
             color: white;
             pointer-events: none;
-            z-index: 25;
             opacity: 0;
             transition: opacity 0.2s;
-            font-weight: 500;
-            backdrop-filter: blur(8px);
+            z-index: 25;
         }
-        .lh-pause-indicator.visible { opacity: 1; }
-
-        /* End screen (when no stories / after finishing queue) */
-        .lh-end-screen {
-            flex: 1;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            background: radial-gradient(circle at 30% 20%, #1a2a32, #000000);
-            color: white;
-            text-align: center;
-            padding: 2rem;
+        .pause-indicator.visible { opacity: 1; }
+        @media (max-width: 600px) {
+            .story-text { font-size: 1.3rem; }
         }
-        .lh-end-screen i {
-            font-size: 4rem;
-            color: #f5b042;
-            margin-bottom: 1.5rem;
-        }
-        .lh-end-screen h3 {
-            font-size: 1.6rem;
-            margin-bottom: 0.5rem;
-        }
-        .lh-refresh-btn {
-            margin-top: 1.8rem;
-            background: #1e4a6e;
-            border: none;
-            padding: 10px 24px;
-            border-radius: 40px;
-            color: white;
-            font-weight: 600;
-            cursor: pointer;
-            transition: 0.2s;
-        }
-        .lh-refresh-btn:hover {
-            background: #0f3b35;
-            transform: scale(1.02);
-        }
-        .lh-spinner {
-            display: inline-block;
-            width: 20px;
-            height: 20px;
-            border: 2px solid rgba(255,255,255,0.3);
-            border-top-color: white;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-            margin-right: 8px;
-        }
-        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
-<div id="lex-widget-root"></div>
+<div id="root"></div>
 <script>
-    (function() {
-        // ========== CONFIGURATION ==========
-        const GITHUB_OWNER = "hunter9201";      // CHANGE TO YOUR USERNAME
-        const GITHUB_REPO = "I";                // CHANGE TO YOUR REPO
-        const GITHUB_BRANCH = "main";
-        const DATA_JSON_PATH = "lex_data.json";
-        const AUTO_SLIDE_INTERVAL = 5500;       // 5.5 sec per story
-        const POLL_INTERVAL = 30000;            // 30 sec background refresh
-        const MAX_RETRIES = 3;
+    (function(){
+        // ===== CONFIGURATION (CHANGE TO YOUR GITHUB) =====
+        const GITHUB_OWNER = "hunter9201";   // YOUR USERNAME
+        const GITHUB_REPO = "I";             // YOUR REPO NAME
+        const BRANCH = "main";
+        const DATA_PATH = "lex_data.json";
+        const AUTO_TIME = 5500; // milliseconds per story
+        const POLL_INTERVAL = 30000;
 
-        let allLawyers = [];
-        let allUpdates = [];
-        let globalStoryQueue = [];
-        let currentStoryIndex = 0;
-        let autoTimer = null;
-        let progressInterval = null;
-        let isPaused = false;
-        let progressStartTime = 0;
-        let activeModal = null;
-        let pauseIndicatorElem = null;
-        let isEndScreenShowing = false;    // prevents double end-screen buildup
-        let pollingActive = true;
+        let lawyers = [];
+        let updates = [];
+        let storyQueue = [];      // [{ lawyer, stories[] }]
+        let queueIndex = 0;
+        let currentStories = [];
+        let storyIndex = 0;
+        let autoTimer = null, progInterval = null;
+        let paused = false;
+        let storyModal = null, listModal = null;
+        let pauseIndicator = null;
+        let currentLawyerId = null; // for marking viewed on close
 
-        // ----- fetch & data helpers -----
-        async function fetchDataWithRetry(retries = MAX_RETRIES) {
-            const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${DATA_JSON_PATH}`;
-            for (let attempt = 1; attempt <= retries; attempt++) {
-                try {
-                    const res = await fetch(url, { cache: 'no-store' });
-                    if (res.status === 404) {
-                        console.warn(`Attempt ${attempt}: lex_data.json not found.`);
-                        if (attempt === retries) return null;
-                        continue;
-                    }
-                    if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    const data = await res.json();
-                    console.log("✅ Lex stories data refreshed");
-                    return data;
-                } catch (err) {
-                    console.warn(`Attempt ${attempt} failed:`, err);
-                    if (attempt === retries) throw err;
-                    await new Promise(r => setTimeout(r, 1000 * attempt));
-                }
-            }
-            return null;
+        // ----- localStorage helpers (viewed timestamps) -----
+        function getViewed(lawyerId) {
+            return parseInt(localStorage.getItem(`viewed_${lawyerId}`) || '0');
+        }
+        function setViewed(lawyerId) {
+            localStorage.setItem(`viewed_${lawyerId}`, Date.now());
+        }
+        function hasUnseen(lawyerId, lawyerUpdates) {
+            if (!lawyerUpdates.length) return false;
+            const last = getViewed(lawyerId);
+            return lawyerUpdates.some(u => new Date(u.timestamp).getTime() > last);
         }
 
-        async function loadData() {
-            let data = null;
+        // ----- Fetch data from GitHub -----
+        async function fetchData() {
+            const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${BRANCH}/${DATA_PATH}`;
             try {
-                data = await fetchDataWithRetry();
-            } catch (err) {
-                console.error("GitHub fetch error:", err);
-            }
-
-            if (data && Array.isArray(data.lawyers) && Array.isArray(data.updates)) {
-                allLawyers = data.lawyers;
-                allUpdates = data.updates;
-            } else {
-                allLawyers = [];
-                allUpdates = [];
-            }
-
-            // Ensure each lawyer has updates array & remove expired
-            for (let lawyer of allLawyers) {
-                if (!allUpdates.find(lu => lu.lawyerId === lawyer.id)) {
-                    allUpdates.push({ lawyerId: lawyer.id, updates: [] });
+                const res = await fetch(url, { cache: 'no-store' });
+                if (!res.ok) return;
+                const data = await res.json();
+                if (data.lawyers && data.updates) {
+                    lawyers = data.lawyers;
+                    updates = data.updates;
+                    const now = Date.now();
+                    for (let lu of updates) {
+                        lu.updates = (lu.updates || []).filter(u => new Date(u.expiresAt).getTime() > now);
+                    }
                 }
-            }
-            const now = Date.now();
-            for (let lu of allUpdates) {
-                lu.updates = (lu.updates || []).filter(up => new Date(up.expiresAt).getTime() > now);
-            }
-
-            const oldQueueLength = globalStoryQueue.length;
-            rebuildGlobalStoryQueue();
-            console.log(`Data updated: ${globalStoryQueue.length} active stories (was ${oldQueueLength})`);
-            
-            // If modal is open and we're at the end screen, try to refresh the queue automatically
-            if (activeModal && isEndScreenShowing) {
-                // Check if new stories arrived
-                if (globalStoryQueue.length > 0) {
-                    console.log("New stories detected while on end screen — restarting carousel");
-                    hideEndScreenAndRestart();
-                }
-            }
+            } catch(e) { console.error(e); }
         }
 
-        function rebuildGlobalStoryQueue() {
-            const stories = [];
-            for (let lawyer of allLawyers) {
-                const lawyerUpdatesEntry = allUpdates.find(lu => lu.lawyerId === lawyer.id);
-                if (!lawyerUpdatesEntry || !lawyerUpdatesEntry.updates.length) continue;
-                for (let update of lawyerUpdatesEntry.updates) {
-                    stories.push({
-                        ...update,
-                        lawyerId: lawyer.id,
-                        lawyerName: lawyer.name,
-                        lawyerInitials: lawyer.initials || lawyer.name.slice(0,2).toUpperCase(),
-                        timestamp: update.timestamp
-                    });
+        // Build queue: all lawyers with unseen stories, sorted newest first, selected lawyer at front
+        function buildQueue(selectedId) {
+            let queue = [];
+            for (let lawyer of lawyers) {
+                let lu = updates.find(u => u.lawyerId === lawyer.id);
+                if (!lu || !lu.updates.length) continue;
+                if (hasUnseen(lawyer.id, lu.updates)) {
+                    queue.push({ lawyer, stories: lu.updates });
                 }
             }
-            // newest first
-            stories.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
-            globalStoryQueue = stories;
+            // sort by newest story timestamp
+            queue.sort((a,b) => {
+                let aMax = Math.max(...a.stories.map(s => new Date(s.timestamp).getTime()));
+                let bMax = Math.max(...b.stories.map(s => new Date(s.timestamp).getTime()));
+                return bMax - aMax;
+            });
+            // move selected to front if present, else add it if it has updates (allows replay)
+            let idx = queue.findIndex(q => q.lawyer.id === selectedId);
+            if (idx !== -1 && idx !== 0) {
+                let sel = queue[idx];
+                queue.splice(idx,1);
+                queue.unshift(sel);
+            } else if (idx === -1) {
+                let lu = updates.find(u => u.lawyerId === selectedId);
+                if (lu && lu.updates.length) {
+                    queue.unshift({ lawyer: lawyers.find(l => l.id === selectedId), stories: lu.updates });
+                }
+            }
+            return queue;
         }
 
-        // ----- Carousel control (full screen) -----
-        function stopSlideTimer() {
+        // ----- Status List UI (WhatsApp style) -----
+        function renderList() {
+            const container = document.getElementById('statusListContainer');
+            if (!container) return;
+            if (!lawyers.length) {
+                container.innerHTML = '<div style="text-align:center;padding:3rem;"><i class="fas fa-users-slash"></i><br>No lawyers yet</div>';
+                return;
+            }
+            let html = '';
+            for (let lawyer of lawyers) {
+                let lu = updates.find(u => u.lawyerId === lawyer.id);
+                let hasUpdates = lu && lu.updates.length;
+                let unseen = hasUpdates && hasUnseen(lawyer.id, lu.updates);
+                let last = hasUpdates ? new Date(Math.max(...lu.updates.map(u => new Date(u.timestamp).getTime()))) : null;
+                let timeStr = last ? formatTime(last) : 'No updates';
+                html += `
+                    <div class="status-item" data-id="${lawyer.id}">
+                        <div class="avatar">
+                            <div class="avatar-circle">${escapeHtml(lawyer.initials || lawyer.name.slice(0,2))}</div>
+                            ${hasUpdates ? `<div class="ring ${unseen ? 'unseen' : ''}"></div>` : ''}
+                        </div>
+                        <div class="info">
+                            <div class="name">${escapeHtml(lawyer.name)}</div>
+                            <div class="time">${timeStr}</div>
+                        </div>
+                        ${unseen ? '<div class="badge">New</div>' : ''}
+                    </div>
+                `;
+            }
+            container.innerHTML = html;
+            document.querySelectorAll('.status-item').forEach(el => {
+                el.addEventListener('click', () => {
+                    const id = parseInt(el.dataset.id);
+                    startPlayback(id);
+                });
+            });
+        }
+
+        function formatTime(date) {
+            const diff = Date.now() - date;
+            const mins = Math.floor(diff / 60000);
+            if (mins < 1) return 'Just now';
+            if (mins < 60) return `${mins} min ago`;
+            const hours = Math.floor(mins / 60);
+            if (hours < 24) return `${hours} hr ago`;
+            const days = Math.floor(hours / 24);
+            if (days === 1) return 'Yesterday';
+            return `${days} days ago`;
+        }
+
+        // ----- Story Player (auto-advance, pause, progress) -----
+        function stopTimer() {
             if (autoTimer) clearTimeout(autoTimer);
-            if (progressInterval) clearInterval(progressInterval);
-            autoTimer = null;
-            progressInterval = null;
+            if (progInterval) clearInterval(progInterval);
+            autoTimer = null; progInterval = null;
         }
 
-        function updateProgressBar(percent) {
-            if (!activeModal) return;
-            const progressContainer = activeModal.querySelector('#storyProgressContainer');
-            if (!progressContainer) return;
-            const segments = progressContainer.querySelectorAll('.lh-progress-fill');
-            if (segments[currentStoryIndex]) {
-                segments[currentStoryIndex].style.width = percent + '%';
-            }
-        }
-
-        function startAutoSlide() {
-            if (isPaused) return;
-            stopSlideTimer();
-            if (!globalStoryQueue.length) return;
-            updateProgressBar(0);
-            progressStartTime = Date.now();
-            progressInterval = setInterval(() => {
-                if (isPaused) return;
-                const elapsed = Date.now() - progressStartTime;
-                const percent = Math.min(100, (elapsed / AUTO_SLIDE_INTERVAL) * 100);
-                updateProgressBar(percent);
+        function startTimer() {
+            if (paused) return;
+            stopTimer();
+            const start = Date.now();
+            progInterval = setInterval(() => {
+                if (paused) return;
+                const elapsed = Date.now() - start;
+                const percent = Math.min(100, (elapsed / AUTO_TIME) * 100);
+                updateProgress(percent);
                 if (percent >= 100) {
-                    clearInterval(progressInterval);
-                    progressInterval = null;
+                    clearInterval(progInterval);
+                    progInterval = null;
                     nextStory();
                 }
             }, 40);
-            autoTimer = setTimeout(() => {
-                if (!isPaused) nextStory();
-            }, AUTO_SLIDE_INTERVAL);
+            autoTimer = setTimeout(() => { if (!paused) nextStory(); }, AUTO_TIME);
         }
 
-        function resetProgressForIndex() {
-            if (!activeModal) return;
-            const progressContainer = activeModal.querySelector('#storyProgressContainer');
-            if (!progressContainer) return;
-            const segments = progressContainer.querySelectorAll('.lh-progress-fill');
-            for (let i = 0; i < segments.length; i++) {
-                segments[i].style.width = (i < currentStoryIndex) ? '100%' : (i === currentStoryIndex ? '0%' : '0%');
+        function updateProgress(percent) {
+            if (!storyModal) return;
+            const fills = storyModal.querySelectorAll('.progress-fill');
+            if (fills[storyIndex]) fills[storyIndex].style.width = percent + '%';
+        }
+
+        function resetProgress() {
+            if (!storyModal) return;
+            const fills = storyModal.querySelectorAll('.progress-fill');
+            for (let i = 0; i < fills.length; i++) {
+                fills[i].style.width = (i < storyIndex) ? '100%' : (i === storyIndex ? '0%' : '0%');
             }
-            if (!isPaused) startAutoSlide();
+            if (!paused) startTimer();
         }
 
-        function renderCurrentStory(story) {
-            if (!activeModal) return;
-            const slideContainer = activeModal.querySelector('#storySlideContent');
-            if (!slideContainer) return;
-            
-            let mediaHtml = "";
-            const contentHtml = story.type === "text" 
-                ? `<div class="lh-story-text">${escapeHtml(story.content)}</div>` 
-                : `<div class="lh-story-text lh-story-text-small">${escapeHtml(story.content)}</div>`;
-            
-            if (story.type === "image" && story.mediaUrl) {
-                mediaHtml = `<img src="${escapeHtml(story.mediaUrl)}" alt="story update" loading="lazy">`;
-            } else if (story.type === "video" && story.mediaUrl) {
-                let videoUrl = story.mediaUrl;
-                if (videoUrl.includes("youtube.com/watch?v=") || videoUrl.includes("youtu.be/")) {
-                    let embedUrl = "";
-                    if (videoUrl.includes("youtube.com/watch?v=")) {
-                        let vid = videoUrl.split("v=")[1]?.split("&")[0];
-                        embedUrl = `https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&playsinline=1`;
-                    } else if (videoUrl.includes("youtu.be/")) {
-                        let vid = videoUrl.split("/").pop().split("?")[0];
-                        embedUrl = `https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&playsinline=1`;
-                    }
-                    mediaHtml = `<iframe src="${embedUrl}" frameborder="0" allow="autoplay; encrypted-media; picture-in-picture" allowfullscreen style="width:90%; height:55vh; border-radius:28px;"></iframe>`;
+        function renderStory(story) {
+            if (!storyModal) return;
+            const slideDiv = storyModal.querySelector('#slideContent');
+            if (!slideDiv) return;
+            let media = '';
+            const contentDiv = story.type === 'text' 
+                ? `<div class="story-text">${escapeHtml(story.content)}</div>` 
+                : `<div class="story-text" style="font-size:1.2rem;">${escapeHtml(story.content)}</div>`;
+            if (story.type === 'image' && story.mediaUrl) {
+                media = `<img src="${escapeHtml(story.mediaUrl)}" alt="story">`;
+            } else if (story.type === 'video' && story.mediaUrl) {
+                let url = story.mediaUrl;
+                if (url.includes('youtube.com/watch?v=') || url.includes('youtu.be/')) {
+                    let vid = '';
+                    if (url.includes('v=')) vid = url.split('v=')[1]?.split('&')[0];
+                    else if (url.includes('youtu.be/')) vid = url.split('/').pop().split('?')[0];
+                    media = `<iframe src="https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&playsinline=1" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:90%; height:55vh; border-radius:28px;"></iframe>`;
                 } else {
-                    mediaHtml = `<video controls autoplay muted playsinline style="max-width:95%; max-height:65vh; border-radius:28px;"><source src="${escapeHtml(videoUrl)}" type="video/mp4">Your browser does not support video.</video>`;
+                    media = `<video controls autoplay muted playsinline style="max-width:95%; max-height:65vh; border-radius:28px;"><source src="${escapeHtml(url)}" type="video/mp4"></video>`;
                 }
-            } else if (story.type === "article" && story.mediaUrl) {
-                mediaHtml = `<a href="${escapeHtml(story.mediaUrl)}" target="_blank" class="lh-article-link"><i class="fas fa-newspaper"></i> Read full article →</a>`;
+            } else if (story.type === 'article' && story.mediaUrl) {
+                media = `<a href="${escapeHtml(story.mediaUrl)}" target="_blank" class="article-link" style="display:inline-flex;gap:10px;background:#1e4a6e;padding:12px 24px;border-radius:60px;color:white;text-decoration:none;margin-top:20px;"><i class="fas fa-newspaper"></i> Read article →</a>`;
             }
-            
-            const formattedDate = new Date(story.timestamp).toLocaleString(undefined, { hour:'2-digit', minute:'2-digit', day:'numeric', month:'short' });
-            slideContainer.innerHTML = `
-                <div class="lh-story-slide">
-                    ${contentHtml}
-                    ${mediaHtml}
-                    <div class="lh-update-meta"><i class="far fa-clock"></i> ${formattedDate}</div>
+            const dateStr = new Date(story.timestamp).toLocaleString();
+            slideDiv.innerHTML = `
+                <div class="story-slide">
+                    ${contentDiv}
+                    ${media}
+                    <div style="font-size:0.7rem;opacity:0.7;margin-top:16px;background:rgba(0,0,0,0.5);padding:6px 14px;border-radius:40px;"><i class="far fa-clock"></i> ${dateStr}</div>
                 </div>
             `;
-            const headerNameSpan = activeModal.querySelector('#storyHeaderLawyer');
-            const headerAvatar = activeModal.querySelector('#storyHeaderAvatar');
-            if (headerNameSpan) headerNameSpan.innerText = story.lawyerName || "Advocate";
-            if (headerAvatar) headerAvatar.innerText = (story.lawyerInitials || story.lawyerName?.slice(0,2) || "LX").toUpperCase();
-            
-            const videoElem = slideContainer.querySelector('video');
-            if (videoElem && story.type === "video" && !story.mediaUrl.includes("youtube")) {
-                videoElem.play().catch(e => console.log("autoplay blocked"));
+            const headerName = storyModal.querySelector('#storyName');
+            const headerAvatar = storyModal.querySelector('#storyAvatar');
+            if (headerName) headerName.innerText = story.lawyerName;
+            if (headerAvatar) headerAvatar.innerText = story.lawyerInitials;
+            const video = slideDiv.querySelector('video');
+            if (video && story.type === 'video' && !story.mediaUrl.includes('youtube')) {
+                video.play().catch(e=>console.log);
             }
         }
 
-        // Show end screen when queue is empty or finished
-        function showEndScreen() {
-            if (!activeModal) return;
-            if (isEndScreenShowing) return;
-            isEndScreenShowing = true;
-            stopSlideTimer();
-            const slideContainer = activeModal.querySelector('#storySlideContent');
-            if (!slideContainer) return;
-            slideContainer.innerHTML = `
-                <div class="lh-end-screen">
-                    <i class="fas fa-hourglass-half"></i>
-                    <h3>No more stories right now</h3>
-                    <p style="margin-top: 8px; opacity:0.7;">New updates will appear automatically</p>
-                    <button class="lh-refresh-btn" id="manualRefreshBtn"><i class="fas fa-sync-alt"></i> Check for updates</button>
-                </div>
-            `;
-            const refreshBtn = document.getElementById('manualRefreshBtn');
-            if (refreshBtn) {
-                refreshBtn.addEventListener('click', async () => {
-                    refreshBtn.innerHTML = '<span class="lh-spinner"></span> Checking...';
-                    refreshBtn.disabled = true;
-                    await loadData();   // forces refetch and rebuild queue
-                    if (globalStoryQueue.length > 0) {
-                        hideEndScreenAndRestart();
-                    } else {
-                        refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Still no updates';
-                        setTimeout(() => {
-                            if (refreshBtn && !refreshBtn.disabled === false) {
-                                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Check for updates';
-                                refreshBtn.disabled = false;
-                            }
-                        }, 1500);
-                    }
-                });
-            }
-        }
-
-        function hideEndScreenAndRestart() {
-            if (!activeModal) return;
-            isEndScreenShowing = false;
-            // reinitialize carousel with fresh queue
-            if (globalStoryQueue.length === 0) {
-                showEndScreen();
+        function showStoryAtIndex(idx) {
+            if (idx < 0) idx = 0;
+            if (idx >= currentStories.length) {
+                finishLawyerAndNext();
                 return;
             }
-            // Rebuild progress bar UI according to new queue length
-            const progressContainer = activeModal.querySelector('#storyProgressContainer');
-            if (progressContainer) {
-                progressContainer.innerHTML = globalStoryQueue.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('');
-            }
-            currentStoryIndex = 0;
-            const firstStory = globalStoryQueue[0];
-            if (firstStory) {
-                renderCurrentStory(firstStory);
-                resetProgressForIndex();
-            }
+            storyIndex = idx;
+            renderStory(currentStories[storyIndex]);
+            resetProgress();
         }
 
-        function nextStory() {
-            if (isEndScreenShowing) return;
-            if (!globalStoryQueue.length) {
-                showEndScreen();
+        function nextStory() { showStoryAtIndex(storyIndex + 1); }
+        function prevStory() { if (storyIndex > 0) showStoryAtIndex(storyIndex - 1); }
+
+        function finishLawyerAndNext() {
+            // Mark current lawyer as viewed
+            if (currentLawyerId) setViewed(currentLawyerId);
+            queueIndex++;
+            if (queueIndex >= storyQueue.length) {
+                // All done
+                closeStoryModal();
+                openListModal();
                 return;
             }
-            if (currentStoryIndex + 1 < globalStoryQueue.length) {
-                showStoryAtIndex(currentStoryIndex + 1);
-            } else {
-                // End of queue → show end screen (but keep polling for new)
-                showEndScreen();
-            }
+            playNextLawyer();
         }
 
-        function prevStory() {
-            if (isEndScreenShowing) return;
-            if (currentStoryIndex - 1 >= 0) {
-                showStoryAtIndex(currentStoryIndex - 1);
+        function playNextLawyer() {
+            const item = storyQueue[queueIndex];
+            if (!item) return;
+            const lawyer = item.lawyer;
+            currentLawyerId = lawyer.id;
+            const stories = item.stories;
+            currentStories = [...stories].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)).map(s => ({
+                ...s,
+                lawyerName: lawyer.name,
+                lawyerInitials: lawyer.initials || lawyer.name.slice(0,2).toUpperCase(),
+                lawyerId: lawyer.id
+            }));
+            storyIndex = 0;
+            const progContainer = storyModal.querySelector('#progressContainer');
+            if (progContainer) {
+                progContainer.innerHTML = currentStories.map(() => `<div class="progress-segment"><div class="progress-fill"></div></div>`).join('');
             }
+            renderStory(currentStories[0]);
+            resetProgress();
         }
 
-        function showStoryAtIndex(index) {
-            if (!globalStoryQueue.length) {
-                showEndScreen();
+        function startPlayback(selectedId) {
+            storyQueue = buildQueue(selectedId);
+            if (!storyQueue.length) {
+                alert('No stories available');
                 return;
             }
-            if (index < 0) index = 0;
-            if (index >= globalStoryQueue.length) {
-                showEndScreen();
-                return;
-            }
-            // if we were on end screen, clear that flag
-            if (isEndScreenShowing) {
-                isEndScreenShowing = false;
-                // rebuild progress UI if needed (size might have changed)
-                const progressContainer = activeModal.querySelector('#storyProgressContainer');
-                if (progressContainer && progressContainer.children.length !== globalStoryQueue.length) {
-                    progressContainer.innerHTML = globalStoryQueue.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('');
-                }
-            }
-            currentStoryIndex = index;
-            const story = globalStoryQueue[currentStoryIndex];
-            renderCurrentStory(story);
-            resetProgressForIndex();
+            queueIndex = 0;
+            if (listModal && listModal.classList.contains('active')) listModal.classList.remove('active');
+            if (storyModal) closeStoryModal();
+            createStoryModal();
+            playNextLawyer();
         }
 
-        function pauseStory() {
-            if (isPaused) return;
-            isPaused = true;
-            stopSlideTimer();
-            if (pauseIndicatorElem) {
-                pauseIndicatorElem.classList.add("visible");
-                setTimeout(() => {
-                    if (pauseIndicatorElem) pauseIndicatorElem.classList.remove("visible");
-                }, 1200);
-            }
-        }
-
-        function resumeStory() {
-            if (!isPaused) return;
-            isPaused = false;
-            startAutoSlide();
-        }
-
-        function togglePause() {
-            if (isPaused) resumeStory();
-            else pauseStory();
-        }
-
-        // Build stories modal with all controls
-        function buildFullscreenStoriesUI(storiesArray) {
+        function createStoryModal() {
             const modal = document.createElement('div');
-            modal.className = 'lh-stories-modal';
-            modal.id = 'dynamicStoriesModal';
+            modal.className = 'story-modal';
             modal.innerHTML = `
-                <div class="lh-stories-container">
-                    <div class="lh-progress-strip" id="storyProgressContainer">
-                        ${storiesArray.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('')}
+                <div class="story-container">
+                    <div class="progress-strip" id="progressContainer"></div>
+                    <div class="story-header">
+                        <div class="story-avatar" id="storyAvatar">LX</div>
+                        <div class="story-name" id="storyName">Lex</div>
                     </div>
-                    <div class="lh-story-header">
-                        <div class="lh-story-avatar" id="storyHeaderAvatar">LX</div>
-                        <div class="lh-story-author">
-                            <span id="storyHeaderLawyer">Lawyer</span>
-                        </div>
+                    <button class="close-story" id="closeStoryBtn"><i class="fas fa-times"></i></button>
+                    <div id="slideContent" style="flex:1; height:100%;"></div>
+                    <div class="click-zones">
+                        <div class="click-left"></div>
+                        <div class="click-right"></div>
                     </div>
-                    <button class="lh-close-story" id="lhCloseStoryBtn"><i class="fas fa-times"></i></button>
-                    <div id="storySlideContent" style="flex:1; display:flex; flex-direction:column;"></div>
-                    <div class="lh-click-zones">
-                        <div class="lh-click-left"></div>
-                        <div class="lh-click-right"></div>
-                    </div>
-                    <div class="lh-pause-indicator" id="pauseIndicatorStory">⏸ Paused · tap to resume</div>
+                    <div class="pause-indicator" id="pauseIndicator">⏸ Paused · tap to resume</div>
                 </div>
             `;
             document.body.appendChild(modal);
-            activeModal = modal;
-            pauseIndicatorElem = modal.querySelector('#pauseIndicatorStory');
-            
-            const leftZone = modal.querySelector('.lh-click-left');
-            const rightZone = modal.querySelector('.lh-click-right');
-            const closeBtn = modal.querySelector('#lhCloseStoryBtn');
-            leftZone.addEventListener('click', (e) => { e.stopPropagation(); prevStory(); });
-            rightZone.addEventListener('click', (e) => { e.stopPropagation(); nextStory(); });
-            closeBtn.addEventListener('click', () => closeStoriesModal());
-            const slideArea = modal.querySelector('#storySlideContent');
+            storyModal = modal;
+            pauseIndicator = modal.querySelector('#pauseIndicator');
+            modal.querySelector('.click-left').addEventListener('click', (e) => { e.stopPropagation(); prevStory(); });
+            modal.querySelector('.click-right').addEventListener('click', (e) => { e.stopPropagation(); nextStory(); });
+            modal.querySelector('#closeStoryBtn').addEventListener('click', () => {
+                // Mark current lawyer as viewed before closing
+                if (currentLawyerId) setViewed(currentLawyerId);
+                closeStoryModal();
+                openListModal();
+            });
+            const slideArea = modal.querySelector('#slideContent');
             if (slideArea) slideArea.addEventListener('click', (e) => { e.stopPropagation(); togglePause(); });
-            return modal;
+            modal.classList.add('active');
         }
 
-        function closeStoriesModal() {
-            if (activeModal) {
-                stopSlideTimer();
-                isPaused = false;
-                isEndScreenShowing = false;
-                if (activeModal.parentNode) activeModal.parentNode.removeChild(activeModal);
-                activeModal = null;
-                pauseIndicatorElem = null;
-                currentStoryIndex = 0;
+        function closeStoryModal() {
+            if (storyModal) {
+                stopTimer();
+                paused = false;
+                storyModal.remove();
+                storyModal = null;
+                currentLawyerId = null;
             }
         }
 
-        // ----- AUTO-OPEN STORIES (no FAB) -----
-        async function openGlobalStories() {
-            await loadData();  // ensure latest data
-            
-            if (globalStoryQueue.length === 0) {
-                // Show end screen directly with "no stories" message
-                const tempModal = buildFullscreenStoriesUI([]); // empty progress
-                if (tempModal) {
-                    activeModal = tempModal;
-                    activeModal.classList.add('active');
-                    showEndScreen();  // will display the end screen inside
-                }
-                return;
-            }
-            
-            if (activeModal) closeStoriesModal();
-            const modalUI = buildFullscreenStoriesUI(globalStoryQueue);
-            if (!modalUI) return;
-            activeModal = modalUI;
-            currentStoryIndex = 0;
-            isEndScreenShowing = false;
-            const firstStory = globalStoryQueue[0];
-            if (firstStory) {
-                renderCurrentStory(firstStory);
-                resetProgressForIndex();
-            }
-            modalUI.classList.add('active');
-            startAutoSlide();
-        }
-
-        // Periodic background refresh (updates queue & auto-restarts if needed)
-        async function backgroundRefresh() {
-            const previousCount = globalStoryQueue.length;
-            await loadData();   // rebuilds queue
-            // If modal is open and we are on end screen, try to auto-restart when stories appear
-            if (activeModal && isEndScreenShowing && globalStoryQueue.length > 0) {
-                console.log("Auto-restarting stories due to new updates");
-                hideEndScreenAndRestart();
-            } 
-            // If modal is open and we are in the middle of stories, but queue changed (e.g., new stories added after current index)
-            // We DO NOT disrupt current viewing to avoid annoyance, but we can update the progress bar length only if we are not at end.
-            else if (activeModal && !isEndScreenShowing && globalStoryQueue.length !== previousCount) {
-                // silently update the progress container length (optional)
-                const progressContainer = activeModal.querySelector('#storyProgressContainer');
-                if (progressContainer && progressContainer.children.length !== globalStoryQueue.length) {
-                    // Only update visually without resetting current story progress
-                    const newSegmentsHtml = globalStoryQueue.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('');
-                    progressContainer.innerHTML = newSegmentsHtml;
-                    // restore current fill status
-                    const fills = progressContainer.querySelectorAll('.lh-progress-fill');
-                    for (let i = 0; i < fills.length; i++) {
-                        if (i < currentStoryIndex) fills[i].style.width = '100%';
-                        else if (i === currentStoryIndex) fills[i].style.width = '0%';
-                        else fills[i].style.width = '0%';
-                    }
+        function togglePause() {
+            if (paused) {
+                paused = false;
+                startTimer();
+                if (pauseIndicator) pauseIndicator.classList.remove('visible');
+            } else {
+                paused = true;
+                stopTimer();
+                if (pauseIndicator) {
+                    pauseIndicator.classList.add('visible');
+                    setTimeout(() => pauseIndicator.classList.remove('visible'), 1200);
                 }
             }
+        }
+
+        // ----- List Modal (main view) -----
+        function openListModal() {
+            if (!listModal) {
+                const root = document.getElementById('root');
+                const div = document.createElement('div');
+                div.className = 'list-modal';
+                div.id = 'listModal';
+                div.innerHTML = `
+                    <div class="list-header">
+                        <h2><i class="fas fa-gavel"></i> Lex Updates</h2>
+                        <button class="close-list" id="closeListBtn">&times;</button>
+                    </div>
+                    <div id="statusListContainer" class="status-list"></div>
+                `;
+                root.appendChild(div);
+                listModal = div;
+                document.getElementById('closeListBtn').addEventListener('click', () => {
+                    listModal.classList.remove('active');
+                });
+            }
+            renderList();
+            listModal.classList.add('active');
+        }
+
+        // ----- Floating Action Button -----
+        function createFAB() {
+            const root = document.getElementById('root');
+            const fab = document.createElement('div');
+            fab.className = 'fab';
+            fab.innerHTML = '<i class="fas fa-gavel"></i>';
+            fab.addEventListener('click', () => openListModal());
+            root.appendChild(fab);
+        }
+
+        // ----- Background refresh -----
+        async function refresh() {
+            await fetchData();
+            if (listModal && listModal.classList.contains('active')) renderList();
         }
 
         function escapeHtml(str) {
             if (!str) return '';
-            return str.replace(/[&<>]/g, function(m) {
-                if (m === '&') return '&amp;';
-                if (m === '<') return '&lt;';
-                if (m === '>') return '&gt;';
-                return m;
-            });
+            return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m]));
         }
 
-        // Start everything: auto-open stories on page load
-        (async function init() {
-            await openGlobalStories();    // shows stories or end screen
-            setInterval(backgroundRefresh, POLL_INTERVAL);
+        // ----- Initialization -----
+        (async function() {
+            await fetchData();
+            createFAB();
+            openListModal();
+            setInterval(refresh, POLL_INTERVAL);
         })();
     })();
 </script>
