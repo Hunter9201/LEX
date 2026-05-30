@@ -3,13 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Lex · Stories — Auto‑open Full Screen</title>
+    <title>Lex · Infinite Stories — Auto‑Loop & Live Updates</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
 
-        /* FULL SCREEN STORIES MODAL — WhatsApp style, takes over immediately */
+        /* FULL SCREEN STORIES MODAL — WhatsApp style */
         .lh-stories-modal {
             position: fixed;
             top: 0;
@@ -39,7 +39,7 @@
             flex-direction: column;
         }
 
-        /* Story header (lawyer info) */
+        /* Story header */
         .lh-story-header {
             position: absolute;
             top: 18px;
@@ -78,11 +78,6 @@
             letter-spacing: -0.2px;
             text-shadow: 0 1px 1px black;
         }
-        .lh-story-time {
-            font-size: 0.7rem;
-            opacity: 0.8;
-            margin-left: 8px;
-        }
         .lh-close-story {
             position: absolute;
             top: 20px;
@@ -106,7 +101,7 @@
             background: rgba(255,255,255,0.2);
         }
 
-        /* Progress bars (WhatsApp style top) */
+        /* Progress bars */
         .lh-progress-strip {
             position: absolute;
             top: 12px;
@@ -130,7 +125,7 @@
             transition: width 0.05s linear;
         }
 
-        /* Slide content - full screen immersive */
+        /* Slide content */
         .lh-story-slide {
             flex: 1;
             display: flex;
@@ -187,10 +182,6 @@
             transition: 0.2s;
             backdrop-filter: blur(4px);
         }
-        .lh-article-link:hover {
-            background: #0f3b35;
-            transform: scale(1.02);
-        }
         .lh-update-meta {
             font-size: 0.7rem;
             opacity: 0.7;
@@ -201,7 +192,7 @@
             display: inline-block;
         }
 
-        /* Click zones (left/right navigation) */
+        /* Click zones */
         .lh-click-zones {
             position: absolute;
             top: 0;
@@ -235,48 +226,71 @@
         }
         .lh-pause-indicator.visible { opacity: 1; }
 
-        /* No stories fallback */
-        .lh-no-stories {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background: #0a0c10;
+        /* End screen (when no stories / after finishing queue) */
+        .lh-end-screen {
+            flex: 1;
             display: flex;
-            align-items: center;
+            flex-direction: column;
             justify-content: center;
-            z-index: 1000000;
+            align-items: center;
+            background: radial-gradient(circle at 30% 20%, #1a2a32, #000000);
             color: white;
-            font-family: 'Inter', sans-serif;
             text-align: center;
             padding: 2rem;
         }
-        .lh-no-stories-card {
-            background: rgba(0,0,0,0.7);
-            backdrop-filter: blur(12px);
-            border-radius: 48px;
-            padding: 2rem;
-            max-width: 80%;
+        .lh-end-screen i {
+            font-size: 4rem;
+            color: #f5b042;
+            margin-bottom: 1.5rem;
         }
+        .lh-end-screen h3 {
+            font-size: 1.6rem;
+            margin-bottom: 0.5rem;
+        }
+        .lh-refresh-btn {
+            margin-top: 1.8rem;
+            background: #1e4a6e;
+            border: none;
+            padding: 10px 24px;
+            border-radius: 40px;
+            color: white;
+            font-weight: 600;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .lh-refresh-btn:hover {
+            background: #0f3b35;
+            transform: scale(1.02);
+        }
+        .lh-spinner {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 8px;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
     </style>
 </head>
 <body>
 <div id="lex-widget-root"></div>
 <script>
     (function() {
-        // ========== CONFIGURATION (matching admin panel) ==========
-        const GITHUB_OWNER = "hunter9201";      // CHANGE TO YOUR GITHUB USERNAME
+        // ========== CONFIGURATION ==========
+        const GITHUB_OWNER = "hunter9201";      // CHANGE TO YOUR USERNAME
         const GITHUB_REPO = "I";                // CHANGE TO YOUR REPO
         const GITHUB_BRANCH = "main";
         const DATA_JSON_PATH = "lex_data.json";
-        const AUTO_SLIDE_INTERVAL = 5500;  // 5.5 sec per story (WhatsApp style)
-        const POLL_INTERVAL = 30000;
+        const AUTO_SLIDE_INTERVAL = 5500;       // 5.5 sec per story
+        const POLL_INTERVAL = 30000;            // 30 sec background refresh
         const MAX_RETRIES = 3;
 
         let allLawyers = [];
         let allUpdates = [];
-        let globalStoryQueue = [];      // flat array of active stories across lawyers
+        let globalStoryQueue = [];
         let currentStoryIndex = 0;
         let autoTimer = null;
         let progressInterval = null;
@@ -284,6 +298,8 @@
         let progressStartTime = 0;
         let activeModal = null;
         let pauseIndicatorElem = null;
+        let isEndScreenShowing = false;    // prevents double end-screen buildup
+        let pollingActive = true;
 
         // ----- fetch & data helpers -----
         async function fetchDataWithRetry(retries = MAX_RETRIES) {
@@ -292,13 +308,13 @@
                 try {
                     const res = await fetch(url, { cache: 'no-store' });
                     if (res.status === 404) {
-                        console.warn(`Attempt ${attempt}: lex_data.json not found (404).`);
+                        console.warn(`Attempt ${attempt}: lex_data.json not found.`);
                         if (attempt === retries) return null;
                         continue;
                     }
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const data = await res.json();
-                    console.log("✅ Lex stories data loaded:", data);
+                    console.log("✅ Lex stories data refreshed");
                     return data;
                 } catch (err) {
                     console.warn(`Attempt ${attempt} failed:`, err);
@@ -311,37 +327,43 @@
 
         async function loadData() {
             let data = null;
-            let fetchErrorFlag = false;
             try {
                 data = await fetchDataWithRetry();
             } catch (err) {
                 console.error("GitHub fetch error:", err);
-                fetchErrorFlag = true;
             }
 
             if (data && Array.isArray(data.lawyers) && Array.isArray(data.updates)) {
                 allLawyers = data.lawyers;
                 allUpdates = data.updates;
-                console.log(`📋 ${allLawyers.length} lawyers, raw updates count: ${allUpdates.reduce((s,lu)=> s + (lu.updates?.length||0),0)}`);
             } else {
                 allLawyers = [];
                 allUpdates = [];
-                if (!fetchErrorFlag) console.warn("Invalid data structure or missing file.");
             }
 
-            // Ensure each lawyer has an updates entry
+            // Ensure each lawyer has updates array & remove expired
             for (let lawyer of allLawyers) {
                 if (!allUpdates.find(lu => lu.lawyerId === lawyer.id)) {
                     allUpdates.push({ lawyerId: lawyer.id, updates: [] });
                 }
             }
-            // Remove expired updates (based on expiresAt)
             const now = Date.now();
             for (let lu of allUpdates) {
                 lu.updates = (lu.updates || []).filter(up => new Date(up.expiresAt).getTime() > now);
             }
 
-            rebuildGlobalStoryQueue();   // refresh queue for auto-open
+            const oldQueueLength = globalStoryQueue.length;
+            rebuildGlobalStoryQueue();
+            console.log(`Data updated: ${globalStoryQueue.length} active stories (was ${oldQueueLength})`);
+            
+            // If modal is open and we're at the end screen, try to refresh the queue automatically
+            if (activeModal && isEndScreenShowing) {
+                // Check if new stories arrived
+                if (globalStoryQueue.length > 0) {
+                    console.log("New stories detected while on end screen — restarting carousel");
+                    hideEndScreenAndRestart();
+                }
+            }
         }
 
         function rebuildGlobalStoryQueue() {
@@ -359,13 +381,12 @@
                     });
                 }
             }
-            // sort newest first (WhatsApp style)
+            // newest first
             stories.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             globalStoryQueue = stories;
-            console.log(`📖 Story queue rebuilt: ${globalStoryQueue.length} active stories`);
         }
 
-        // ----- FULL SCREEN STORIES CAROUSEL (WhatsApp like) -----
+        // ----- Carousel control (full screen) -----
         function stopSlideTimer() {
             if (autoTimer) clearTimeout(autoTimer);
             if (progressInterval) clearInterval(progressInterval);
@@ -455,47 +476,119 @@
                     <div class="lh-update-meta"><i class="far fa-clock"></i> ${formattedDate}</div>
                 </div>
             `;
-            // update header info
             const headerNameSpan = activeModal.querySelector('#storyHeaderLawyer');
             const headerAvatar = activeModal.querySelector('#storyHeaderAvatar');
             if (headerNameSpan) headerNameSpan.innerText = story.lawyerName || "Advocate";
             if (headerAvatar) headerAvatar.innerText = (story.lawyerInitials || story.lawyerName?.slice(0,2) || "LX").toUpperCase();
             
-            // autoplay video if needed
             const videoElem = slideContainer.querySelector('video');
             if (videoElem && story.type === "video" && !story.mediaUrl.includes("youtube")) {
-                videoElem.play().catch(e => console.log("autoplay blocked", e));
+                videoElem.play().catch(e => console.log("autoplay blocked"));
+            }
+        }
+
+        // Show end screen when queue is empty or finished
+        function showEndScreen() {
+            if (!activeModal) return;
+            if (isEndScreenShowing) return;
+            isEndScreenShowing = true;
+            stopSlideTimer();
+            const slideContainer = activeModal.querySelector('#storySlideContent');
+            if (!slideContainer) return;
+            slideContainer.innerHTML = `
+                <div class="lh-end-screen">
+                    <i class="fas fa-hourglass-half"></i>
+                    <h3>No more stories right now</h3>
+                    <p style="margin-top: 8px; opacity:0.7;">New updates will appear automatically</p>
+                    <button class="lh-refresh-btn" id="manualRefreshBtn"><i class="fas fa-sync-alt"></i> Check for updates</button>
+                </div>
+            `;
+            const refreshBtn = document.getElementById('manualRefreshBtn');
+            if (refreshBtn) {
+                refreshBtn.addEventListener('click', async () => {
+                    refreshBtn.innerHTML = '<span class="lh-spinner"></span> Checking...';
+                    refreshBtn.disabled = true;
+                    await loadData();   // forces refetch and rebuild queue
+                    if (globalStoryQueue.length > 0) {
+                        hideEndScreenAndRestart();
+                    } else {
+                        refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Still no updates';
+                        setTimeout(() => {
+                            if (refreshBtn && !refreshBtn.disabled === false) {
+                                refreshBtn.innerHTML = '<i class="fas fa-sync-alt"></i> Check for updates';
+                                refreshBtn.disabled = false;
+                            }
+                        }, 1500);
+                    }
+                });
+            }
+        }
+
+        function hideEndScreenAndRestart() {
+            if (!activeModal) return;
+            isEndScreenShowing = false;
+            // reinitialize carousel with fresh queue
+            if (globalStoryQueue.length === 0) {
+                showEndScreen();
+                return;
+            }
+            // Rebuild progress bar UI according to new queue length
+            const progressContainer = activeModal.querySelector('#storyProgressContainer');
+            if (progressContainer) {
+                progressContainer.innerHTML = globalStoryQueue.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('');
+            }
+            currentStoryIndex = 0;
+            const firstStory = globalStoryQueue[0];
+            if (firstStory) {
+                renderCurrentStory(firstStory);
+                resetProgressForIndex();
+            }
+        }
+
+        function nextStory() {
+            if (isEndScreenShowing) return;
+            if (!globalStoryQueue.length) {
+                showEndScreen();
+                return;
+            }
+            if (currentStoryIndex + 1 < globalStoryQueue.length) {
+                showStoryAtIndex(currentStoryIndex + 1);
+            } else {
+                // End of queue → show end screen (but keep polling for new)
+                showEndScreen();
+            }
+        }
+
+        function prevStory() {
+            if (isEndScreenShowing) return;
+            if (currentStoryIndex - 1 >= 0) {
+                showStoryAtIndex(currentStoryIndex - 1);
             }
         }
 
         function showStoryAtIndex(index) {
             if (!globalStoryQueue.length) {
-                closeStoriesModal();
+                showEndScreen();
                 return;
             }
             if (index < 0) index = 0;
             if (index >= globalStoryQueue.length) {
-                closeStoriesModal();   // end of stories
+                showEndScreen();
                 return;
+            }
+            // if we were on end screen, clear that flag
+            if (isEndScreenShowing) {
+                isEndScreenShowing = false;
+                // rebuild progress UI if needed (size might have changed)
+                const progressContainer = activeModal.querySelector('#storyProgressContainer');
+                if (progressContainer && progressContainer.children.length !== globalStoryQueue.length) {
+                    progressContainer.innerHTML = globalStoryQueue.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('');
+                }
             }
             currentStoryIndex = index;
             const story = globalStoryQueue[currentStoryIndex];
             renderCurrentStory(story);
             resetProgressForIndex();
-        }
-
-        function nextStory() {
-            if (currentStoryIndex + 1 < globalStoryQueue.length) {
-                showStoryAtIndex(currentStoryIndex + 1);
-            } else {
-                closeStoriesModal();   // finished all stories
-            }
-        }
-
-        function prevStory() {
-            if (currentStoryIndex - 1 >= 0) {
-                showStoryAtIndex(currentStoryIndex - 1);
-            }
         }
 
         function pauseStory() {
@@ -521,9 +614,8 @@
             else pauseStory();
         }
 
-        // Build full-screen stories modal (WhatsApp style)
+        // Build stories modal with all controls
         function buildFullscreenStoriesUI(storiesArray) {
-            if (!storiesArray.length) return null;
             const modal = document.createElement('div');
             modal.className = 'lh-stories-modal';
             modal.id = 'dynamicStoriesModal';
@@ -551,7 +643,6 @@
             activeModal = modal;
             pauseIndicatorElem = modal.querySelector('#pauseIndicatorStory');
             
-            // event listeners
             const leftZone = modal.querySelector('.lh-click-left');
             const rightZone = modal.querySelector('.lh-click-right');
             const closeBtn = modal.querySelector('#lhCloseStoryBtn');
@@ -567,6 +658,7 @@
             if (activeModal) {
                 stopSlideTimer();
                 isPaused = false;
+                isEndScreenShowing = false;
                 if (activeModal.parentNode) activeModal.parentNode.removeChild(activeModal);
                 activeModal = null;
                 pauseIndicatorElem = null;
@@ -574,50 +666,27 @@
             }
         }
 
-        // ----- AUTO-OPEN STORIES (no FAB, immediate) -----
+        // ----- AUTO-OPEN STORIES (no FAB) -----
         async function openGlobalStories() {
-            rebuildGlobalStoryQueue();   // ensure latest queue
+            await loadData();  // ensure latest data
             
-            if (!globalStoryQueue.length) {
-                // Show friendly "no stories" message and optionally retry after poll
-                const noStoryDiv = document.createElement('div');
-                noStoryDiv.className = 'lh-no-stories';
-                noStoryDiv.id = 'noStoriesFallback';
-                noStoryDiv.innerHTML = `
-                    <div class="lh-no-stories-card">
-                        <i class="fas fa-newspaper" style="font-size: 3rem; color: #f5b042; margin-bottom: 1rem; display: block;"></i>
-                        <h2>No active stories</h2>
-                        <p style="margin-top: 0.5rem; opacity:0.8;">There are no lawyer stories available right now.<br>Check back later for updates.</p>
-                        <button id="retryStoriesBtn" style="margin-top: 1.5rem; background: #1e4a6e; border: none; color: white; padding: 8px 20px; border-radius: 40px; cursor: pointer; font-weight: 500;">↻ Refresh</button>
-                    </div>
-                `;
-                document.body.appendChild(noStoryDiv);
-                const retryBtn = document.getElementById('retryStoriesBtn');
-                if (retryBtn) {
-                    retryBtn.addEventListener('click', async () => {
-                        await refreshAndUpdate();
-                        if (globalStoryQueue.length > 0) {
-                            if (noStoryDiv) noStoryDiv.remove();
-                            openGlobalStories();  // retry opening stories
-                        } else {
-                            // still none, keep message but update text
-                            const msgDiv = noStoryDiv.querySelector('p');
-                            if (msgDiv) msgDiv.innerHTML = 'Still no active stories.<br>Add updates via Lex Admin Panel.';
-                        }
-                    });
+            if (globalStoryQueue.length === 0) {
+                // Show end screen directly with "no stories" message
+                const tempModal = buildFullscreenStoriesUI([]); // empty progress
+                if (tempModal) {
+                    activeModal = tempModal;
+                    activeModal.classList.add('active');
+                    showEndScreen();  // will display the end screen inside
                 }
                 return;
             }
-            
-            // remove any leftover no-stories overlay
-            const existingNoStory = document.getElementById('noStoriesFallback');
-            if (existingNoStory) existingNoStory.remove();
             
             if (activeModal) closeStoriesModal();
             const modalUI = buildFullscreenStoriesUI(globalStoryQueue);
             if (!modalUI) return;
             activeModal = modalUI;
             currentStoryIndex = 0;
+            isEndScreenShowing = false;
             const firstStory = globalStoryQueue[0];
             if (firstStory) {
                 renderCurrentStory(firstStory);
@@ -627,14 +696,35 @@
             startAutoSlide();
         }
 
-        // ----- polling and initialisation -----
-        async function refreshAndUpdate() {
-            await loadData();          // updates allLawyers, allUpdates, expires, rebuilds queue internally
-            // if modal is not open and we have stories? not needed, but keep badge not used (removed FAB)
-            // but we also need to check if we should automatically open on initial load
+        // Periodic background refresh (updates queue & auto-restarts if needed)
+        async function backgroundRefresh() {
+            const previousCount = globalStoryQueue.length;
+            await loadData();   // rebuilds queue
+            // If modal is open and we are on end screen, try to auto-restart when stories appear
+            if (activeModal && isEndScreenShowing && globalStoryQueue.length > 0) {
+                console.log("Auto-restarting stories due to new updates");
+                hideEndScreenAndRestart();
+            } 
+            // If modal is open and we are in the middle of stories, but queue changed (e.g., new stories added after current index)
+            // We DO NOT disrupt current viewing to avoid annoyance, but we can update the progress bar length only if we are not at end.
+            else if (activeModal && !isEndScreenShowing && globalStoryQueue.length !== previousCount) {
+                // silently update the progress container length (optional)
+                const progressContainer = activeModal.querySelector('#storyProgressContainer');
+                if (progressContainer && progressContainer.children.length !== globalStoryQueue.length) {
+                    // Only update visually without resetting current story progress
+                    const newSegmentsHtml = globalStoryQueue.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('');
+                    progressContainer.innerHTML = newSegmentsHtml;
+                    // restore current fill status
+                    const fills = progressContainer.querySelectorAll('.lh-progress-fill');
+                    for (let i = 0; i < fills.length; i++) {
+                        if (i < currentStoryIndex) fills[i].style.width = '100%';
+                        else if (i === currentStoryIndex) fills[i].style.width = '0%';
+                        else fills[i].style.width = '0%';
+                    }
+                }
+            }
         }
 
-        // Escape helper
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>]/g, function(m) {
@@ -645,30 +735,10 @@
             });
         }
 
-        // ----- START: auto-load and open stories immediately -----
+        // Start everything: auto-open stories on page load
         (async function init() {
-            // load data first
-            await refreshAndUpdate();
-            // After initial data fetch, immediately open the stories modal (if any stories exist)
-            // If no stories, openGlobalStories will show placeholder with retry
-            await openGlobalStories();
-            
-            // Set up periodic polling to refresh stories in background
-            setInterval(async () => {
-                await refreshAndUpdate();
-                // If the stories modal is currently open, we do NOT force-reload it (would be disruptive)
-                // But if it's closed and new stories arrive, nothing auto-opens (user might refresh page)
-                // However if the modal is closed and we have stories, we don't auto-open again after initial.
-                // But we can optionally update the queue for next time user opens? but we removed FAB.
-                // For simplicity: if no modal active and we have stories after poll, we don't disturb.
-                // But we also update the "no stories" overlay if it exists and stories appear.
-                const noStoryOverlay = document.getElementById('noStoriesFallback');
-                if (noStoryOverlay && globalStoryQueue.length > 0) {
-                    noStoryOverlay.remove();
-                    // automatically open stories when they appear after being empty
-                    await openGlobalStories();
-                }
-            }, POLL_INTERVAL);
+            await openGlobalStories();    // shows stories or end screen
+            setInterval(backgroundRefresh, POLL_INTERVAL);
         })();
     })();
 </script>
