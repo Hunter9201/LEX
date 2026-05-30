@@ -3,70 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Lex · Stories Widget — Full‑Screen Stories</title>
+    <title>Lex · Stories — Auto‑open Full Screen</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        .lh-widget * { font-family: 'Inter', sans-serif; }
 
-        /* Floating FAB — same but triggers stories directly */
-        .lh-widget {
-            position: fixed;
-            bottom: 24px;
-            right: 24px;
-            z-index: 999999;
-        }
-        .lh-fab { cursor: pointer; position: relative; }
-        .lh-fab-inner {
-            width: 60px;
-            height: 60px;
-            background: #1e4a6e;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 6px 14px rgba(0,0,0,0.25);
-            border: 2px solid white;
-            transition: 0.2s;
-            color: white;
-            font-weight: 700;
-            font-size: 1.2rem;
-            gap: 3px;
-        }
-        .lh-fab-inner i { font-size: 20px; color: #f5b042; }
-        .lh-fab:hover .lh-fab-inner { transform: scale(1.05); background: #0f3b35; }
-        .lh-badge {
-            position: absolute;
-            top: -6px;
-            right: -6px;
-            background: #ef4444;
-            color: white;
-            border-radius: 30px;
-            padding: 2px 6px;
-            font-size: 11px;
-            font-weight: bold;
-            min-width: 20px;
-            text-align: center;
-            box-shadow: 0 0 0 2px white;
-        }
-        .lh-pulse-ring {
-            position: absolute;
-            width: 72px;
-            height: 72px;
-            border-radius: 50%;
-            background: rgba(30,74,110,0.4);
-            top: -6px;
-            left: -6px;
-            animation: lh-pulse 1.8s infinite;
-            pointer-events: none;
-        }
-        @keyframes lh-pulse {
-            0% { transform: scale(0.9); opacity: 0.7; }
-            100% { transform: scale(1.3); opacity: 0; }
-        }
-
-        /* FULL SCREEN STORIES MODAL — exactly like WhatsApp stories */
+        /* FULL SCREEN STORIES MODAL — WhatsApp style, takes over immediately */
         .lh-stories-modal {
             position: fixed;
             top: 0;
@@ -292,20 +235,29 @@
         }
         .lh-pause-indicator.visible { opacity: 1; }
 
-        .lh-empty-message {
-            background: rgba(0,0,0,0.8);
-            border-radius: 40px;
-            padding: 24px;
-            text-align: center;
+        /* No stories fallback */
+        .lh-no-stories {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #0a0c10;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000000;
             color: white;
-            max-width: 85%;
-            margin: auto;
+            font-family: 'Inter', sans-serif;
+            text-align: center;
+            padding: 2rem;
         }
-
-        @media (max-width: 600px) {
-            .lh-story-text { font-size: 1.3rem; }
-            .lh-story-header { max-width: 85%; }
-            .lh-story-avatar { width: 36px; height: 36px; }
+        .lh-no-stories-card {
+            background: rgba(0,0,0,0.7);
+            backdrop-filter: blur(12px);
+            border-radius: 48px;
+            padding: 2rem;
+            max-width: 80%;
         }
     </style>
 </head>
@@ -318,14 +270,13 @@
         const GITHUB_REPO = "I";                // CHANGE TO YOUR REPO
         const GITHUB_BRANCH = "main";
         const DATA_JSON_PATH = "lex_data.json";
-        const EXPIRY_HOURS = 48;     // kept for expiration logic in loadData
-        const AUTO_SLIDE_INTERVAL = 5500;  // 5.5 sec per story like stories
+        const AUTO_SLIDE_INTERVAL = 5500;  // 5.5 sec per story (WhatsApp style)
         const POLL_INTERVAL = 30000;
         const MAX_RETRIES = 3;
 
         let allLawyers = [];
-        let allUpdates = [];        // structure: [{ lawyerId, updates: [] }]
-        let globalStoryQueue = [];   // flat array of story objects (combined across lawyers)
+        let allUpdates = [];
+        let globalStoryQueue = [];      // flat array of active stories across lawyers
         let currentStoryIndex = 0;
         let autoTimer = null;
         let progressInterval = null;
@@ -333,9 +284,8 @@
         let progressStartTime = 0;
         let activeModal = null;
         let pauseIndicatorElem = null;
-        let currentSlideContainer = null;
 
-        // ----- helpers & data -----
+        // ----- fetch & data helpers -----
         async function fetchDataWithRetry(retries = MAX_RETRIES) {
             const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${DATA_JSON_PATH}`;
             for (let attempt = 1; attempt <= retries; attempt++) {
@@ -348,7 +298,7 @@
                     }
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
                     const data = await res.json();
-                    console.log("✅ Stories data loaded:", data);
+                    console.log("✅ Lex stories data loaded:", data);
                     return data;
                 } catch (err) {
                     console.warn(`Attempt ${attempt} failed:`, err);
@@ -372,42 +322,28 @@
             if (data && Array.isArray(data.lawyers) && Array.isArray(data.updates)) {
                 allLawyers = data.lawyers;
                 allUpdates = data.updates;
-                console.log(`✅ ${allLawyers.length} lawyers, active updates after expiry: ${totalActiveUpdates()}`);
+                console.log(`📋 ${allLawyers.length} lawyers, raw updates count: ${allUpdates.reduce((s,lu)=> s + (lu.updates?.length||0),0)}`);
             } else {
                 allLawyers = [];
                 allUpdates = [];
                 if (!fetchErrorFlag) console.warn("Invalid data structure or missing file.");
             }
 
-            // Ensure each lawyer has an updates entry, then expire old updates
+            // Ensure each lawyer has an updates entry
             for (let lawyer of allLawyers) {
                 if (!allUpdates.find(lu => lu.lawyerId === lawyer.id)) {
                     allUpdates.push({ lawyerId: lawyer.id, updates: [] });
                 }
             }
+            // Remove expired updates (based on expiresAt)
             const now = Date.now();
             for (let lu of allUpdates) {
                 lu.updates = (lu.updates || []).filter(up => new Date(up.expiresAt).getTime() > now);
             }
 
-            updateFloatingBadge();
-            rebuildGlobalStoryQueue();   // refresh combined queue for direct stories
+            rebuildGlobalStoryQueue();   // refresh queue for auto-open
         }
 
-        function totalActiveUpdates() {
-            return allUpdates.reduce((sum, lu) => sum + (lu.updates?.length || 0), 0);
-        }
-
-        function updateFloatingBadge() {
-            const badge = document.getElementById("lexBadge");
-            if (badge) {
-                const count = totalActiveUpdates();
-                badge.style.display = count > 0 ? "flex" : "none";
-                if (count > 0) badge.textContent = count;
-            }
-        }
-
-        // Build flat story array from all lawyers, sorted by newest first (like WhatsApp recents)
         function rebuildGlobalStoryQueue() {
             const stories = [];
             for (let lawyer of allLawyers) {
@@ -423,13 +359,13 @@
                     });
                 }
             }
-            // sort descending: newest stories first
+            // sort newest first (WhatsApp style)
             stories.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
             globalStoryQueue = stories;
-            console.log(`📖 Global story queue built: ${globalStoryQueue.length} stories ready`);
+            console.log(`📖 Story queue rebuilt: ${globalStoryQueue.length} active stories`);
         }
 
-        // ---- FULL SCREEN STORIES CAROUSEL (WhatsApp style) ----
+        // ----- FULL SCREEN STORIES CAROUSEL (WhatsApp like) -----
         function stopSlideTimer() {
             if (autoTimer) clearTimeout(autoTimer);
             if (progressInterval) clearInterval(progressInterval);
@@ -519,13 +455,13 @@
                     <div class="lh-update-meta"><i class="far fa-clock"></i> ${formattedDate}</div>
                 </div>
             `;
-            // update header info (lawyer name + avatar)
+            // update header info
             const headerNameSpan = activeModal.querySelector('#storyHeaderLawyer');
             const headerAvatar = activeModal.querySelector('#storyHeaderAvatar');
             if (headerNameSpan) headerNameSpan.innerText = story.lawyerName || "Advocate";
             if (headerAvatar) headerAvatar.innerText = (story.lawyerInitials || story.lawyerName?.slice(0,2) || "LX").toUpperCase();
             
-            // autoplay video tag if needed
+            // autoplay video if needed
             const videoElem = slideContainer.querySelector('video');
             if (videoElem && story.type === "video" && !story.mediaUrl.includes("youtube")) {
                 videoElem.play().catch(e => console.log("autoplay blocked", e));
@@ -539,7 +475,7 @@
             }
             if (index < 0) index = 0;
             if (index >= globalStoryQueue.length) {
-                closeStoriesModal();   // end of stories -> close like WhatsApp
+                closeStoriesModal();   // end of stories
                 return;
             }
             currentStoryIndex = index;
@@ -585,7 +521,7 @@
             else pauseStory();
         }
 
-        // Build full-screen stories UI (WhatsApp style)
+        // Build full-screen stories modal (WhatsApp style)
         function buildFullscreenStoriesUI(storiesArray) {
             if (!storiesArray.length) return null;
             const modal = document.createElement('div');
@@ -600,7 +536,6 @@
                         <div class="lh-story-avatar" id="storyHeaderAvatar">LX</div>
                         <div class="lh-story-author">
                             <span id="storyHeaderLawyer">Lawyer</span>
-                            <span class="lh-story-time" id="storyTimeLabel"></span>
                         </div>
                     </div>
                     <button class="lh-close-story" id="lhCloseStoryBtn"><i class="fas fa-times"></i></button>
@@ -616,19 +551,15 @@
             activeModal = modal;
             pauseIndicatorElem = modal.querySelector('#pauseIndicatorStory');
             
-            // attach events
+            // event listeners
             const leftZone = modal.querySelector('.lh-click-left');
             const rightZone = modal.querySelector('.lh-click-right');
             const closeBtn = modal.querySelector('#lhCloseStoryBtn');
-            const storyContainerDiv = modal.querySelector('.lh-stories-container');
-            
             leftZone.addEventListener('click', (e) => { e.stopPropagation(); prevStory(); });
             rightZone.addEventListener('click', (e) => { e.stopPropagation(); nextStory(); });
             closeBtn.addEventListener('click', () => closeStoriesModal());
-            // tap on story content toggles pause/resume
             const slideArea = modal.querySelector('#storySlideContent');
             if (slideArea) slideArea.addEventListener('click', (e) => { e.stopPropagation(); togglePause(); });
-            // optional: prevent accidental close when clicking inside header
             return modal;
         }
 
@@ -643,39 +574,50 @@
             }
         }
 
-        // ENTRY POINT: open stories directly (no lawyer list)
+        // ----- AUTO-OPEN STORIES (no FAB, immediate) -----
         async function openGlobalStories() {
-            // ensure latest data is used (queue might be outdated after poll)
-            rebuildGlobalStoryQueue();
+            rebuildGlobalStoryQueue();   // ensure latest queue
             
             if (!globalStoryQueue.length) {
-                // show mini temporary feedback + exit
-                const tempMsg = document.createElement('div');
-                tempMsg.style.position = 'fixed';
-                tempMsg.style.bottom = '30%';
-                tempMsg.style.left = '50%';
-                tempMsg.style.transform = 'translateX(-50%)';
-                tempMsg.style.backgroundColor = 'rgba(0,0,0,0.85)';
-                tempMsg.style.color = 'white';
-                tempMsg.style.padding = '14px 28px';
-                tempMsg.style.borderRadius = '60px';
-                tempMsg.style.zIndex = '1000001';
-                tempMsg.style.backdropFilter = 'blur(12px)';
-                tempMsg.style.fontWeight = '500';
-                tempMsg.innerHTML = '<i class="fas fa-info-circle"></i> No active stories right now.<br>Check back later!';
-                tempMsg.style.textAlign = 'center';
-                document.body.appendChild(tempMsg);
-                setTimeout(() => { if(tempMsg && tempMsg.remove) tempMsg.remove(); }, 2000);
+                // Show friendly "no stories" message and optionally retry after poll
+                const noStoryDiv = document.createElement('div');
+                noStoryDiv.className = 'lh-no-stories';
+                noStoryDiv.id = 'noStoriesFallback';
+                noStoryDiv.innerHTML = `
+                    <div class="lh-no-stories-card">
+                        <i class="fas fa-newspaper" style="font-size: 3rem; color: #f5b042; margin-bottom: 1rem; display: block;"></i>
+                        <h2>No active stories</h2>
+                        <p style="margin-top: 0.5rem; opacity:0.8;">There are no lawyer stories available right now.<br>Check back later for updates.</p>
+                        <button id="retryStoriesBtn" style="margin-top: 1.5rem; background: #1e4a6e; border: none; color: white; padding: 8px 20px; border-radius: 40px; cursor: pointer; font-weight: 500;">↻ Refresh</button>
+                    </div>
+                `;
+                document.body.appendChild(noStoryDiv);
+                const retryBtn = document.getElementById('retryStoriesBtn');
+                if (retryBtn) {
+                    retryBtn.addEventListener('click', async () => {
+                        await refreshAndUpdate();
+                        if (globalStoryQueue.length > 0) {
+                            if (noStoryDiv) noStoryDiv.remove();
+                            openGlobalStories();  // retry opening stories
+                        } else {
+                            // still none, keep message but update text
+                            const msgDiv = noStoryDiv.querySelector('p');
+                            if (msgDiv) msgDiv.innerHTML = 'Still no active stories.<br>Add updates via Lex Admin Panel.';
+                        }
+                    });
+                }
                 return;
             }
             
-            // if modal already exists, close first
+            // remove any leftover no-stories overlay
+            const existingNoStory = document.getElementById('noStoriesFallback');
+            if (existingNoStory) existingNoStory.remove();
+            
             if (activeModal) closeStoriesModal();
             const modalUI = buildFullscreenStoriesUI(globalStoryQueue);
             if (!modalUI) return;
             activeModal = modalUI;
             currentStoryIndex = 0;
-            // render first story
             const firstStory = globalStoryQueue[0];
             if (firstStory) {
                 renderCurrentStory(firstStory);
@@ -685,28 +627,14 @@
             startAutoSlide();
         }
 
-        // ---- UI initialization (FAB only, no lawyer modal) ----
-        function createWidget() {
-            const root = document.getElementById("lex-widget-root");
-            if (!root) return;
-            root.innerHTML = `
-                <div class="lh-widget">
-                    <div class="lh-fab" id="lexFab">
-                        <div class="lh-pulse-ring"></div>
-                        <div class="lh-fab-inner"><i class="fas fa-gavel"></i> Lex</div>
-                        <div id="lexBadge" class="lh-badge" style="display:none;">0</div>
-                    </div>
-                </div>
-            `;
-            const fab = document.getElementById("lexFab");
-            if (fab) {
-                fab.addEventListener("click", () => {
-                    openGlobalStories();
-                });
-            }
+        // ----- polling and initialisation -----
+        async function refreshAndUpdate() {
+            await loadData();          // updates allLawyers, allUpdates, expires, rebuilds queue internally
+            // if modal is not open and we have stories? not needed, but keep badge not used (removed FAB)
+            // but we also need to check if we should automatically open on initial load
         }
 
-        // error / fallback utilities
+        // Escape helper
         function escapeHtml(str) {
             if (!str) return '';
             return str.replace(/[&<>]/g, function(m) {
@@ -717,27 +645,31 @@
             });
         }
 
-        // refresh data & badge + story queue
-        async function refreshAndUpdate() {
-            await loadData();   // updates allLawyers, allUpdates, expires old ones, rebuilds queue
-            updateFloatingBadge();
-            // if stories modal is open while new data arrives: we update queue but not interrupt current viewing
-            // however we do not force reload open carousel to avoid jank — next story sequence uses rebuilt queue after reopen.
-            // But badge stays correct.
-        }
-        
-        // start everything
-        refreshAndUpdate().then(() => {
-            createWidget();
-        }).catch(err => {
-            console.warn("Initial load issue, but widget still available", err);
-            createWidget();
-        });
-        
-        // periodic polling to sync new stories from GitHub
-        setInterval(() => {
-            refreshAndUpdate();
-        }, POLL_INTERVAL);
+        // ----- START: auto-load and open stories immediately -----
+        (async function init() {
+            // load data first
+            await refreshAndUpdate();
+            // After initial data fetch, immediately open the stories modal (if any stories exist)
+            // If no stories, openGlobalStories will show placeholder with retry
+            await openGlobalStories();
+            
+            // Set up periodic polling to refresh stories in background
+            setInterval(async () => {
+                await refreshAndUpdate();
+                // If the stories modal is currently open, we do NOT force-reload it (would be disruptive)
+                // But if it's closed and new stories arrive, nothing auto-opens (user might refresh page)
+                // However if the modal is closed and we have stories, we don't auto-open again after initial.
+                // But we can optionally update the queue for next time user opens? but we removed FAB.
+                // For simplicity: if no modal active and we have stories after poll, we don't disturb.
+                // But we also update the "no stories" overlay if it exists and stories appear.
+                const noStoryOverlay = document.getElementById('noStoriesFallback');
+                if (noStoryOverlay && globalStoryQueue.length > 0) {
+                    noStoryOverlay.remove();
+                    // automatically open stories when they appear after being empty
+                    await openGlobalStories();
+                }
+            }, POLL_INTERVAL);
+        })();
     })();
 </script>
 </body>
