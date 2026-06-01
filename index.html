@@ -3,14 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-    <title>Lex · WhatsApp‑Style Status Stories (List + Auto‑Advance)</title>
+    <title>Lex · WhatsApp‑Style Stories (with Article Images)</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:opsz,wght@14..32,400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', sans-serif; background: #f5f7fb; }
 
-        /* Floating button to re-open status list (optional) */
+        /* Floating button */
         .lh-fab {
             position: fixed;
             bottom: 24px;
@@ -32,7 +32,7 @@
         }
         .lh-fab:hover { transform: scale(1.05); background: #0f3b35; }
 
-        /* Status list modal (WhatsApp style) */
+        /* Status list modal */
         .lh-status-modal {
             position: fixed;
             top: 0;
@@ -91,11 +91,12 @@
             width: 56px;
             height: 56px;
         }
-        .lh-avatar-circle {
+        .lh-avatar-img, .lh-avatar-circle {
             width: 56px;
             height: 56px;
-            background: #1f5e54;
             border-radius: 50%;
+            object-fit: cover;
+            background: #1f5e54;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -143,7 +144,7 @@
             color: #64748b;
         }
 
-        /* Full screen stories carousel (WhatsApp style) */
+        /* Full screen stories carousel */
         .lh-stories-modal {
             position: fixed;
             top: 0;
@@ -189,11 +190,12 @@
             max-width: 75%;
             pointer-events: none;
         }
-        .lh-story-avatar {
+        .lh-story-avatar-img, .lh-story-avatar {
             width: 40px;
             height: 40px;
-            background: #1f5e54;
             border-radius: 50%;
+            object-fit: cover;
+            background: #1f5e54;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -260,15 +262,22 @@
             background: radial-gradient(circle at 30% 20%, rgba(25,55,70,0.7), #000000cc);
             overflow-y: auto;
         }
+        /* Smaller, article-style image (not full screen) */
         .lh-story-slide img {
-            max-width: 92%;
-            max-height: 70vh;
-            border-radius: 28px;
+            max-width: 85%;
+            max-height: 32vh;
+            width: auto;
+            height: auto;
+            border-radius: 24px;
             object-fit: contain;
+            margin: 20px auto 12px;
+            box-shadow: 0 8px 18px rgba(0,0,0,0.25);
+            background: rgba(255,255,255,0.05);
+            padding: 4px;
         }
         .lh-story-slide video, .lh-story-slide iframe {
             max-width: 95%;
-            max-height: 65vh;
+            max-height: 55vh;
             border-radius: 28px;
         }
         .lh-story-text {
@@ -284,12 +293,13 @@
             align-items: center;
             gap: 10px;
             background: #1e4a6e;
-            padding: 12px 24px;
+            padding: 10px 20px;
             border-radius: 60px;
             color: white;
             text-decoration: none;
             font-weight: 600;
-            margin-top: 20px;
+            margin-top: 16px;
+            font-size: 0.9rem;
         }
         .lh-update-meta {
             font-size: 0.7rem;
@@ -332,6 +342,10 @@
 
         @media (max-width: 600px) {
             .lh-story-text { font-size: 1.3rem; }
+            .lh-story-slide img {
+                max-height: 28vh;
+                max-width: 90%;
+            }
         }
     </style>
 </head>
@@ -339,32 +353,28 @@
 <div id="lex-widget-root"></div>
 <script>
     (function() {
-        // ========== CONFIGURATION (CHANGE TO YOUR GITHUB REPO) ==========
+        // ========== CONFIGURATION ==========
         const GITHUB_OWNER = "hunter9201";      // YOUR USERNAME
         const GITHUB_REPO = "I";                // YOUR REPO NAME
         const GITHUB_BRANCH = "main";
         const DATA_JSON_PATH = "lex_data.json";
-        const AUTO_SLIDE_INTERVAL = 5500;       // 5.5 sec per story
-        const POLL_INTERVAL = 30000;            // refresh every 30s
+        const AUTO_SLIDE_INTERVAL = 5500;
+        const POLL_INTERVAL = 30000;
         const MAX_RETRIES = 3;
 
         let allLawyers = [];
         let allUpdates = [];
-        
-        // Story queue for continuous auto‑advance across lawyers
-        let storyQueue = [];           // array of { lawyer, updates[] }
+        let storyQueue = [];
         let currentQueueIndex = 0;
         let currentLawyerUpdates = [];
         let currentStoryIndex = 0;
-        
-        // Carousel state
         let autoTimer = null, progressInterval = null;
         let isPaused = false;
         let activeStoryModal = null;
         let pauseIndicator = null;
         let statusModal = null;
 
-        // ---------- localStorage: track viewed stories per lawyer ----------
+        // Helper: get/set viewed timestamps
         function getViewedTimestamp(lawyerId) {
             const key = `lex_viewed_${lawyerId}`;
             const val = localStorage.getItem(key);
@@ -379,7 +389,7 @@
             return updates.some(up => new Date(up.timestamp).getTime() > lastViewed);
         }
 
-        // ---------- Data fetching ----------
+        // Fetch data from GitHub
         async function fetchDataWithRetry(retries = MAX_RETRIES) {
             const url = `https://raw.githubusercontent.com/${GITHUB_OWNER}/${GITHUB_REPO}/${GITHUB_BRANCH}/${DATA_JSON_PATH}`;
             for (let attempt = 1; attempt <= retries; attempt++) {
@@ -390,7 +400,11 @@
                         continue;
                     }
                     if (!res.ok) throw new Error(`HTTP ${res.status}`);
-                    return await res.json();
+                    const json = await res.json();
+                    if (json.lawyers) {
+                        json.lawyers.forEach(l => { if (!l.profilePic) l.profilePic = null; });
+                    }
+                    return json;
                 } catch (err) {
                     if (attempt === retries) throw err;
                     await new Promise(r => setTimeout(r, 1000 * attempt));
@@ -413,20 +427,17 @@
                 allLawyers = [];
                 allUpdates = [];
             }
-            // Ensure each lawyer has updates array
             for (let lawyer of allLawyers) {
                 if (!allUpdates.find(lu => lu.lawyerId === lawyer.id)) {
                     allUpdates.push({ lawyerId: lawyer.id, updates: [] });
                 }
             }
-            // Remove expired updates
             const now = Date.now();
             for (let lu of allUpdates) {
                 lu.updates = (lu.updates || []).filter(up => new Date(up.expiresAt).getTime() > now);
             }
         }
 
-        // Build queue of lawyers with unseen updates (newest first overall, selected lawyer first)
         function buildUnseenQueue(selectedLawyerId) {
             const queue = [];
             for (let lawyer of allLawyers) {
@@ -439,20 +450,17 @@
                     });
                 }
             }
-            // Sort by newest update timestamp (most recent status first)
             queue.sort((a, b) => {
                 const aLatest = Math.max(...a.updates.map(u => new Date(u.timestamp).getTime()));
                 const bLatest = Math.max(...b.updates.map(u => new Date(u.timestamp).getTime()));
                 return bLatest - aLatest;
             });
-            // Move selected lawyer to the front
             const index = queue.findIndex(q => q.lawyer.id === selectedLawyerId);
             if (index !== -1 && index !== 0) {
                 const selected = queue[index];
                 queue.splice(index, 1);
                 queue.unshift(selected);
             } else if (index === -1) {
-                // Selected lawyer has no unseen updates – add at front anyway (user wants to watch)
                 const lawyerUpdates = allUpdates.find(lu => lu.lawyerId === selectedLawyerId);
                 if (lawyerUpdates && lawyerUpdates.updates.length) {
                     queue.unshift({
@@ -464,7 +472,19 @@
             return queue;
         }
 
-        // ---------- Status list rendering ----------
+        function formatRelativeTime(date) {
+            const now = new Date();
+            const diffMs = now - date;
+            const diffMins = Math.floor(diffMs / 60000);
+            if (diffMins < 1) return "Just now";
+            if (diffMins < 60) return `${diffMins} min ago`;
+            const diffHours = Math.floor(diffMins / 60);
+            if (diffHours < 24) return `${diffHours} hr ago`;
+            const diffDays = Math.floor(diffHours / 24);
+            if (diffDays === 1) return "Yesterday";
+            return `${diffDays} days ago`;
+        }
+
         function renderStatusList() {
             const listContainer = document.getElementById("lhStatusListContainer");
             if (!listContainer) return;
@@ -480,10 +500,13 @@
                 const unseen = hasUpdates && hasUnseenUpdates(lawyer.id, updates);
                 const lastUpdate = updates.length ? new Date(Math.max(...updates.map(u => new Date(u.timestamp).getTime()))) : null;
                 const timeStr = lastUpdate ? formatRelativeTime(lastUpdate) : "No updates";
+                const avatarHtml = lawyer.profilePic 
+                    ? `<img class="lh-avatar-img" src="${escapeHtml(lawyer.profilePic)}" alt="">` 
+                    : `<div class="lh-avatar-circle">${escapeHtml(lawyer.initials || lawyer.name.slice(0,2))}</div>`;
                 html += `
                     <div class="lh-status-item" data-id="${lawyer.id}">
                         <div class="lh-status-avatar">
-                            <div class="lh-avatar-circle">${escapeHtml(lawyer.initials || lawyer.name.slice(0,2))}</div>
+                            ${avatarHtml}
                             ${hasUpdates ? `<div class="lh-status-ring ${unseen ? 'unseen' : ''}"></div>` : ''}
                         </div>
                         <div class="lh-status-info">
@@ -504,20 +527,6 @@
             });
         }
 
-        function formatRelativeTime(date) {
-            const now = new Date();
-            const diffMs = now - date;
-            const diffMins = Math.floor(diffMs / 60000);
-            if (diffMins < 1) return "Just now";
-            if (diffMins < 60) return `${diffMins} min ago`;
-            const diffHours = Math.floor(diffMins / 60);
-            if (diffHours < 24) return `${diffHours} hr ago`;
-            const diffDays = Math.floor(diffHours / 24);
-            if (diffDays === 1) return "Yesterday";
-            return `${diffDays} days ago`;
-        }
-
-        // ---------- Continuous Playback (tap one status → plays all) ----------
         function startContinuousPlayback(selectedLawyer) {
             storyQueue = buildUnseenQueue(selectedLawyer.id);
             if (storyQueue.length === 0) {
@@ -525,18 +534,15 @@
                 return;
             }
             currentQueueIndex = 0;
-            // Close status list modal if open
             if (statusModal && statusModal.classList.contains("active")) {
                 statusModal.classList.remove("active");
             }
-            // Close any existing story modal
             if (activeStoryModal) closeStoryModalImmediately();
             playCurrentLawyerStories();
         }
 
         function playCurrentLawyerStories() {
             if (currentQueueIndex >= storyQueue.length) {
-                // All done – close story modal and show status list
                 closeStoryModal();
                 openStatusModal();
                 return;
@@ -544,22 +550,20 @@
             const item = storyQueue[currentQueueIndex];
             const lawyer = item.lawyer;
             const updates = item.updates;
-            // Sort updates newest first for viewing
             const sortedUpdates = [...updates].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
             currentLawyerUpdates = sortedUpdates.map(up => ({
                 ...up,
                 lawyerId: lawyer.id,
                 lawyerName: lawyer.name,
-                lawyerInitials: lawyer.initials || lawyer.name.slice(0,2).toUpperCase()
+                lawyerInitials: lawyer.initials || lawyer.name.slice(0,2).toUpperCase(),
+                lawyerProfilePic: lawyer.profilePic
             }));
             currentStoryIndex = 0;
-            // Build modal for this lawyer
             if (activeStoryModal) closeStoryModalImmediately();
             buildStoryModal(lawyer, currentLawyerUpdates);
         }
 
         function finishCurrentLawyerAndNext() {
-            // Mark current lawyer as viewed
             const currentItem = storyQueue[currentQueueIndex];
             if (currentItem) {
                 markLawyerViewed(currentItem.lawyer.id);
@@ -568,7 +572,6 @@
             playCurrentLawyerStories();
         }
 
-        // ---------- Full screen story carousel (for one lawyer) ----------
         function stopAutoSlide() {
             if (autoTimer) clearTimeout(autoTimer);
             if (progressInterval) clearInterval(progressInterval);
@@ -621,12 +624,15 @@
             const slideDiv = activeStoryModal.querySelector('#storySlideContent');
             if (!slideDiv) return;
             let mediaHtml = "";
-            const contentHtml = story.type === "text" 
-                ? `<div class="lh-story-text">${escapeHtml(story.content)}</div>` 
-                : `<div class="lh-story-text lh-story-text-small">${escapeHtml(story.content)}</div>`;
+            let contentHtml = `<div class="lh-story-text">${escapeHtml(story.content)}</div>`;
+
+            if (story.type === "article" && story.articleImageUrl) {
+                mediaHtml += `<img src="${escapeHtml(story.articleImageUrl)}" alt="Article illustration" loading="lazy">`;
+            }
             if (story.type === "image" && story.mediaUrl) {
-                mediaHtml = `<img src="${escapeHtml(story.mediaUrl)}" alt="update" loading="lazy">`;
-            } else if (story.type === "video" && story.mediaUrl) {
+                mediaHtml += `<img src="${escapeHtml(story.mediaUrl)}" alt="Update image" loading="lazy">`;
+            }
+            if (story.type === "video" && story.mediaUrl) {
                 let url = story.mediaUrl;
                 if (url.includes("youtube.com/watch?v=") || url.includes("youtu.be/")) {
                     let vid = "";
@@ -635,11 +641,13 @@
                     const embed = `https://www.youtube.com/embed/${vid}?autoplay=1&mute=1&playsinline=1`;
                     mediaHtml = `<iframe src="${embed}" frameborder="0" allow="autoplay; encrypted-media" allowfullscreen style="width:90%; height:55vh; border-radius:28px;"></iframe>`;
                 } else {
-                    mediaHtml = `<video controls autoplay muted playsinline style="max-width:95%; max-height:65vh; border-radius:28px;"><source src="${escapeHtml(url)}" type="video/mp4"></video>`;
+                    mediaHtml = `<video controls autoplay muted playsinline style="max-width:95%; max-height:55vh; border-radius:28px;"><source src="${escapeHtml(url)}" type="video/mp4"></video>`;
                 }
-            } else if (story.type === "article" && story.mediaUrl) {
-                mediaHtml = `<a href="${escapeHtml(story.mediaUrl)}" target="_blank" class="lh-article-link"><i class="fas fa-newspaper"></i> Read article →</a>`;
             }
+            if (story.type === "article" && story.mediaUrl) {
+                mediaHtml += `<a href="${escapeHtml(story.mediaUrl)}" target="_blank" class="lh-article-link"><i class="fas fa-newspaper"></i> Read full article →</a>`;
+            }
+
             const dateStr = new Date(story.timestamp).toLocaleString(undefined, { hour:'2-digit', minute:'2-digit', day:'numeric', month:'short' });
             slideDiv.innerHTML = `
                 <div class="lh-story-slide">
@@ -648,12 +656,19 @@
                     <div class="lh-update-meta"><i class="far fa-clock"></i> ${dateStr}</div>
                 </div>
             `;
+
             const headerName = activeStoryModal.querySelector('#storyHeaderLawyer');
-            const headerAvatar = activeStoryModal.querySelector('#storyHeaderAvatar');
+            const headerAvatarContainer = activeStoryModal.querySelector('#storyHeaderAvatar');
             if (headerName) headerName.innerText = story.lawyerName;
-            if (headerAvatar) headerAvatar.innerText = story.lawyerInitials;
+            if (headerAvatarContainer) {
+                if (story.lawyerProfilePic) {
+                    headerAvatarContainer.innerHTML = `<img class="lh-story-avatar-img" src="${escapeHtml(story.lawyerProfilePic)}" alt="">`;
+                } else {
+                    headerAvatarContainer.innerHTML = story.lawyerInitials;
+                }
+            }
             const videoElem = slideDiv.querySelector('video');
-            if (videoElem && story.type === "video" && !story.mediaUrl.includes("youtube")) {
+            if (videoElem && story.type === "video" && story.mediaUrl && !story.mediaUrl.includes("youtube")) {
                 videoElem.play().catch(e => console.log);
             }
         }
@@ -702,13 +717,16 @@
             const modal = document.createElement('div');
             modal.className = 'lh-stories-modal';
             modal.id = 'storyModal';
+            const avatarHtml = lawyer.profilePic 
+                ? `<img class="lh-story-avatar-img" src="${escapeHtml(lawyer.profilePic)}" alt="">` 
+                : escapeHtml(lawyer.initials || lawyer.name.slice(0,2));
             modal.innerHTML = `
                 <div class="lh-stories-container">
                     <div class="lh-progress-strip" id="storyProgressContainer">
                         ${updatesArray.map(() => `<div class="lh-progress-segment"><div class="lh-progress-fill"></div></div>`).join('')}
                     </div>
                     <div class="lh-story-header">
-                        <div class="lh-story-avatar" id="storyHeaderAvatar">${escapeHtml(lawyer.initials || lawyer.name.slice(0,2))}</div>
+                        <div class="lh-story-avatar" id="storyHeaderAvatar">${avatarHtml}</div>
                         <div class="lh-story-author"><span id="storyHeaderLawyer">${escapeHtml(lawyer.name)}</span></div>
                     </div>
                     <button class="lh-close-story" id="closeStoryBtn"><i class="fas fa-times"></i></button>
@@ -754,7 +772,6 @@
             }
         }
 
-        // ---------- Status list modal ----------
         function openStatusModal() {
             if (!statusModal) {
                 const root = document.getElementById("lex-widget-root");
@@ -775,12 +792,10 @@
                     statusModal.classList.remove("active");
                 });
             }
-            // Refresh list before showing
             renderStatusList();
             statusModal.classList.add("active");
         }
 
-        // ---------- Floating action button (optional, to re-open list) ----------
         function createFAB() {
             const root = document.getElementById("lex-widget-root");
             if (!root) return;
@@ -791,7 +806,6 @@
             root.appendChild(fab);
         }
 
-        // ---------- Background refresh ----------
         async function refreshAndRender() {
             await loadData();
             if (statusModal && statusModal.classList.contains("active")) {
@@ -804,11 +818,10 @@
             return str.replace(/[&<>]/g, m => ({ '&':'&amp;', '<':'&lt;', '>':'&gt;' }[m] || m));
         }
 
-        // ---------- Start ----------
         (async function init() {
             await loadData();
             createFAB();
-            openStatusModal();      // Show list first
+            openStatusModal();
             setInterval(refreshAndRender, POLL_INTERVAL);
         })();
     })();
